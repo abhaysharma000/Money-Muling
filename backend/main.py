@@ -1,9 +1,11 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import pandas as pd
 import io
 import time
 import traceback
+import json
 from engine import ForensicsEngine
 from models import AnalysisResponse, AnalysisSummary
 
@@ -22,6 +24,9 @@ def analyze_dataframe(df: pd.DataFrame):
     """Reusable generator for forensic analysis stream"""
     def generator():
         try:
+            # Immediate heartbeat to prevent Vercel timeout
+            yield f"data: {json.dumps({'status': 'System Initializing...', 'progress': 0.05})}\n\n"
+            
             start_time = time.time()
             yield f"data: {json.dumps({'status': 'Building Graph Topology...', 'progress': 0.1})}\n\n"
             engine.load_data(df)
@@ -62,9 +67,6 @@ def analyze_dataframe(df: pd.DataFrame):
 @app.get("/")
 def read_root():
     return {"message": "Financial Forensics Engine API"}
-
-from fastapi.responses import StreamingResponse
-import json
 
 @app.post("/upload")
 async def upload_csv(file: UploadFile = File(...)):

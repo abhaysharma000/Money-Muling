@@ -59,10 +59,16 @@ class ForensicsEngine:
         """Detect Fan-in/Fan-out patterns using vectorized sliding windows (Pandas Rolling)"""
         if progress_callback: progress_callback("Analyzing smurfing (Vectorized)...", 0.6)
         smurfing_results = {}
+        if self.df is None or self.df.empty:
+            return smurfing_results
+            
         window_size = '72h'
         
         # Create a temporary sorted DF for rolling analysis
-        temp_df = self.df.sort_values('timestamp')
+        temp_df = self.df.sort_values('timestamp').dropna(subset=['timestamp'])
+        
+        if temp_df.empty:
+            return smurfing_results
         
         # 1. Vectorized Fan-In (Many to One)
         # Group by receiver, use rolling 72h window to count unique senders
