@@ -174,6 +174,21 @@ def map_columns(df: pd.DataFrame):
         
     return df[['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp']]
 
+def format_duration(seconds: float) -> str:
+    """Convert seconds into a human-readable duration string"""
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    elif seconds < 86400:
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        return f"{h}h {m}m"
+    else:
+        d = int(seconds // 86400)
+        h = int((seconds % 86400) // 3600)
+        return f"{d}d {h}h"
+
 @router.post("/ai-analyze/{account_id}")
 async def ai_analyze_endpoint(account_id: str):
     """Generate a mock AI forensic deep-dive for hackathon demo"""
@@ -187,24 +202,48 @@ async def ai_analyze_endpoint(account_id: str):
     node_tx = engine.df[(engine.df['sender_id'] == account_id) | (engine.df['receiver_id'] == account_id)].copy()
     
     # Temporal analysis logic
+    temporal_detail = "Insufficient temporal metadata available."
+    behavioral_flags = []
+    
     if not node_tx.empty and 'timestamp' in node_tx.columns:
         try:
-            # Ensure datetime format
             if not pd.api.types.is_datetime64_any_dtype(node_tx['timestamp']):
                 node_tx['timestamp'] = pd.to_datetime(node_tx['timestamp'])
+            
             min_time = node_tx['timestamp'].min()
             max_time = node_tx['timestamp'].max()
-            duration_hours = (max_time - min_time).total_seconds() / 3600
+            duration_secs = (max_time - min_time).total_seconds()
             
-            if duration_hours < 1:
-                temporal_detail = f"High intensity activity: {len(node_tx)} tx in under 1 hour."
+            readable_duration = format_duration(duration_secs)
+            
+            # Night pattern detection (11 PM - 5 AM)
+            night_tx = node_tx[node_tx['timestamp'].dt.hour.isin([23, 0, 1, 2, 3, 4])]
+            night_pct = (len(night_tx) / len(node_tx)) * 100 if not node_tx.empty else 0
+            
+            if night_pct > 25:
+                behavioral_flags.append({
+                    "type": "Nocturnal",
+                    "detail": f"{night_pct:.1f}% of activity occurs in dead-of-night hours (11PM-5AM)."
+                })
+
+            if duration_secs < 3600:
+                 temporal_detail = f"High-velocity burst: {len(node_tx)} tx in {readable_duration}."
             else:
-                velocity = len(node_tx) / max(1, duration_hours)
-                temporal_detail = f"Temporal density: {velocity:.1f} tx/hr over a {duration_hours:.1f}h window."
-        except Exception:
+                velocity = len(node_tx) / max(1, duration_secs / 3600)
+                temporal_detail = f"Temporal density: {velocity:.1f} tx/hr over a {readable_duration} window."
+                
+            # Consistency vs Variance
+            hourly_tx = node_tx.resample('1h', on='timestamp').size()
+            if not hourly_tx.empty and len(hourly_tx) > 3:
+                cv = hourly_tx.std() / hourly_tx.mean() if hourly_tx.mean() > 0 else 0
+                if cv < 0.2:
+                    behavioral_flags.append({
+                        "type": "Robotic",
+                        "detail": "Highly consistent transaction cadence suggestive of automated pooling."
+                    })
+        except Exception as e:
+            print(f"Temporal analysis error: {e}")
             temporal_detail = "Temporal anomaly: Clustering suggestive of automated script behavior."
-    else:
-        temporal_detail = "Insufficient temporal metadata available in source data."
 
     # Role classification
     if in_degree > 10 and out_degree < 2:
@@ -214,6 +253,7 @@ async def ai_analyze_endpoint(account_id: str):
     elif in_degree >= 1 and out_degree >= 1:
         role = "Intermediary Layer"
     else:
+        role = "Endpoint Node"
         role = "Isolated Node"
 
     return {

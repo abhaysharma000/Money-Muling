@@ -214,9 +214,19 @@ class ForensicsEngine:
                         explanations[node].remove(curr_ex[0])
                         explanations[node].append(f"Part of a {l}-hop layered shell network.")
 
-        # 4. Bursts
+        # 4. Bursts & Night Activity
         for node, is_burst in bursts.items():
             if node in legitimate: continue
+            
+            node_tx = self.df[(self.df['sender_id'] == node) | (self.df['receiver_id'] == node)]
+            night_tx = node_tx[node_tx['timestamp'].dt.hour.isin([23, 0, 1, 2, 3, 4])]
+            night_pct = (len(night_tx) / len(node_tx)) * 100 if len(node_tx) > 5 else 0
+            
+            if night_pct > 40: # High threshold for automatic flagging
+                scores[node] = scores.get(node, 0) + 25
+                tags.setdefault(node, set()).add("nocturnal_activity")
+                explanations.setdefault(node, []).append(f"Suspicious nocturnal pattern: {night_pct:.1f}% of volume during 23:00-05:00.")
+
             if is_burst and node not in tags:
                 scores[node] = scores.get(node, 0) + 15
                 tags.setdefault(node, set()).add("high_velocity")

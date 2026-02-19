@@ -9,15 +9,34 @@ const TrendChart = ({ transactions, color = '#3b82f6' }) => {
         );
     }
 
-    // Process transactions into daily buckets
+    // Process transactions into buckets (Daily or Hourly)
+    const sortedTxs = [...transactions].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const firstTx = new Date(sortedTxs[0].timestamp);
+    const lastTx = new Date(sortedTxs[sortedTxs.length - 1].timestamp);
+    const durationHrs = (lastTx - firstTx) / (1000 * 60 * 60);
+
+    const useHourly = durationHrs < 48;
+
     const data = transactions.reduce((acc, tx) => {
-        const date = tx.timestamp.split(' ')[0];
-        acc[date] = (acc[date] || 0) + tx.amount;
+        const dateObj = new Date(tx.timestamp);
+        let key;
+        if (useHourly) {
+            // "YYYY-MM-DD HH:00"
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const hour = String(dateObj.getHours()).padStart(2, '0');
+            key = `${year}-${month}-${day} ${hour}:00`;
+        } else {
+            // "YYYY-MM-DD"
+            key = tx.timestamp.split(' ')[0];
+        }
+        acc[key] = (acc[key] || 0) + tx.amount;
         return acc;
     }, {});
 
-    const sortedDates = Object.keys(data).sort();
-    const values = sortedDates.map(d => data[d]);
+    const sortedLabels = Object.keys(data).sort();
+    const values = sortedLabels.map(d => data[d]);
     const max = Math.max(...values, 1);
 
     // SVG Dimensions
@@ -26,7 +45,7 @@ const TrendChart = ({ transactions, color = '#3b82f6' }) => {
     const padding = 10;
 
     const points = values.map((v, i) => {
-        const x = padding + (i / (values.length - 1)) * (width - 2 * padding);
+        const x = padding + (i / Math.max(1, values.length - 1)) * (width - 2 * padding);
         const y = (height - padding) - (v / max) * (height - 2 * padding);
         return `${x},${y}`;
     }).join(' ');
@@ -68,7 +87,7 @@ const TrendChart = ({ transactions, color = '#3b82f6' }) => {
 
                 {/* Data Points */}
                 {values.map((v, i) => {
-                    const x = padding + (i / (values.length - 1)) * (width - 2 * padding);
+                    const x = padding + (i / Math.max(1, values.length - 1)) * (width - 2 * padding);
                     const y = (height - padding) - (v / max) * (height - 2 * padding);
                     return (
                         <circle
@@ -79,16 +98,16 @@ const TrendChart = ({ transactions, color = '#3b82f6' }) => {
                             fill={color}
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
                         >
-                            <title>{sortedDates[i]}: ${v.toLocaleString()}</title>
+                            <title>{sortedLabels[i]}: ${v.toLocaleString()}</title>
                         </circle>
                     );
                 })}
             </svg>
 
             <div className="flex justify-between mt-2 text-[8px] font-black text-slate-600 uppercase tracking-widest">
-                <span>{sortedDates[0]}</span>
-                <span>VOLUME TREND</span>
-                <span>{sortedDates[sortedDates.length - 1]}</span>
+                <span>{sortedLabels[0]}</span>
+                <span className="text-blue-500/50">{useHourly ? 'HOURLY ANALYSIS' : 'DAILY AGGREGATION'}</span>
+                <span>{sortedLabels[sortedLabels.length - 1]}</span>
             </div>
         </div>
     );
