@@ -212,11 +212,16 @@ async def generate_demo_endpoint():
     """Trigger the generation of a demo dataset and return the stream"""
     try:
         from generate_data import generate_test_csv
-        filename = "transactions.csv"
-        # Reduced to 1500 for instant loading and snappy UI physics
-        generate_test_csv(filename, 1500)
-        df = pd.read_csv(filename)
+        
+        # Use in-memory buffer to avoid Vercel Read-Only File System errors
+        output_buffer = io.StringIO()
+        generate_test_csv(num_transactions=1500, output_file=output_buffer)
+        output_buffer.seek(0)
+        
+        df = pd.read_csv(output_buffer)
         df = map_columns(df)
         return StreamingResponse(analyze_dataframe(df), media_type="text/event-stream")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

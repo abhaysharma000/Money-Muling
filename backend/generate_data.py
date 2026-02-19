@@ -4,13 +4,21 @@ import uuid
 from datetime import datetime, timedelta
 import argparse
 
-def generate_test_csv(filename="transactions.csv", num_transactions=10000):
+def generate_test_csv(filename="transactions.csv", num_transactions=10000, output_file=None):
     print(f"Generating {num_transactions} transactions...")
     accounts = [f"ACC_{i:04d}" for i in range(1, 1001)]
     
     start_time = datetime(2026, 1, 1)
     
-    with open(filename, 'w', newline='') as f:
+    # Use the provided file-like object or open the filename
+    if output_file:
+        f = output_file
+        should_close = False
+    else:
+        f = open(filename, 'w', newline='')
+        should_close = True
+        
+    try:
         writer = csv.DictWriter(f, fieldnames=['transaction_id', 'sender_id', 'receiver_id', 'amount', 'timestamp'])
         writer.writeheader()
         
@@ -68,7 +76,11 @@ def generate_test_csv(filename="transactions.csv", num_transactions=10000):
                 "timestamp": (start_time + timedelta(days=15, minutes=i)).strftime("%Y-%m-%d %H:%M:%S")
             })
 
-    print(f"Successfully generated {num_transactions} transactions in {filename}")
+    finally:
+        if should_close:
+            f.close()
+
+    print(f"Successfully generated {num_transactions} transactions")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
