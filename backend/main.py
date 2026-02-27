@@ -280,7 +280,7 @@ async def generate_demo_endpoint():
     
     # Use in-memory buffer to avoid Vercel Read-Only File System errors
     output_buffer = io.StringIO()
-    generate_test_csv(num_transactions=1500, output_file=output_buffer)
+    generate_test_csv(num_transactions=800, output_file=output_buffer)
     output_buffer.seek(0)
     
     df = pd.read_csv(output_buffer)

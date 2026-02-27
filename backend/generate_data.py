@@ -23,7 +23,8 @@ def generate_test_csv(filename="transactions.csv", num_transactions=10000, outpu
         writer.writeheader()
         
         # 1. Generate some random noise
-        for i in range(num_transactions - 200):
+        # Reserve about 100 slots for suspicious patterns to avoid exceeding num_transactions
+        for i in range(num_transactions - 100):
             tx_id = f"TX_{i:06d}"
             sender = random.choice(accounts)
             receiver = random.choice(accounts)
@@ -41,8 +42,8 @@ def generate_test_csv(filename="transactions.csv", num_transactions=10000, outpu
                 "timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S")
             })
 
-        # 2. Inject Cycles (length 3 and 4)
-        for r in range(5):
+        # 2. Inject Cycles (length 4) - Simplified (2 cycles = 8 nodes)
+        for r in range(2):
             nodes = [f"CYC_{r}_{i}" for i in range(4)]
             for i in range(len(nodes)):
                 next_node = nodes[(i + 1) % len(nodes)]
@@ -54,9 +55,9 @@ def generate_test_csv(filename="transactions.csv", num_transactions=10000, outpu
                     "timestamp": (start_time + timedelta(days=r, hours=i)).strftime("%Y-%m-%d %H:%M:%S")
                 })
 
-        # 3. Inject Fan-in (Aggregation)
+        # 3. Inject Fan-in (Aggregation) - Simplified (15 sources)
         target_sink = "SINK_MEGA_01"
-        for i in range(50):
+        for i in range(15):
             writer.writerow({
                 "transaction_id": f"TX_FAN_IN_{i}",
                 "sender_id": f"SRCE_{i:03d}",
@@ -65,9 +66,9 @@ def generate_test_csv(filename="transactions.csv", num_transactions=10000, outpu
                 "timestamp": (start_time + timedelta(days=10, hours=i)).strftime("%Y-%m-%d %H:%M:%S")
             })
 
-        # 4. Inject High Velocity Burst
+        # 4. Inject High Velocity Burst - Simplified (10 receivers)
         burst_acc = "BURST_NODE_X"
-        for i in range(50):
+        for i in range(10):
             writer.writerow({
                 "transaction_id": f"TX_BURST_{i}",
                 "sender_id": burst_acc,
