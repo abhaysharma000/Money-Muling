@@ -270,9 +270,8 @@ const App = () => {
         a.click();
     };
 
-    const startLiveFeed = () => {
+    const startLiveFeed = async () => {
         if (isLiveStream) {
-            if (wsRef.current) wsRef.current.close();
             setIsLiveStream(false);
             return;
         }
@@ -283,52 +282,20 @@ const App = () => {
         setLoading(true);
         setProgress({ status: 'Connecting to Bank API Stream...', percent: 10 });
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/ws/live-feed`;
-
         try {
-            const ws = new WebSocket(wsUrl);
-            wsRef.current = ws;
-
-            ws.onopen = () => {
-                setProgress({ status: 'Connection Established. Waiting for transactions...', percent: 20 });
-                setLoading(false);
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const parsedData = JSON.parse(event.data);
-                    if (parsedData.error) {
-                        setError(parsedData.error);
-                        setIsLiveStream(false);
-                        ws.close();
-                        return;
-                    }
-                    setData(parsedData);
-
-                    if (parsedData.complete) {
-                        setIsLiveStream(false);
-                        ws.close();
-                    }
-                } catch (e) {
-                    console.error("Error parsing websocket message", e);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket Error', error);
-                setError("Live Feed Connection Error");
-                setIsLiveStream(false);
-                setLoading(false);
-            };
-
-            ws.onclose = () => {
-                setIsLiveStream(false);
-            };
-        } catch (e) {
-            setError("Could not establish WebSocket connection");
+            const response = await fetch(`${API_BASE_URL}/live-stream`, { method: 'GET' });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Live Stream Connection Failed (${response.status})`);
+            }
+            await processAnalysisStream(response);
+        } catch (err) {
+            console.error('Live Stream Error', err);
+            setError("Live Feed Connection Error: Accessing through Vercel Serverless Function.");
             setIsLiveStream(false);
+        } finally {
             setLoading(false);
+            setIsLiveStream(false);
         }
     };
 

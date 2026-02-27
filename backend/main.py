@@ -287,6 +287,59 @@ async def generate_demo_endpoint():
     df = map_columns(df)
     return StreamingResponse(analyze_dataframe(df), media_type="text/event-stream")
 
+@router.get("/live-stream")
+async def live_stream_endpoint():
+    """Streaming alternative to WebSockets for serverless environments (Vercel)"""
+    try:
+        from generate_data import generate_test_csv
+    except ImportError:
+        from backend.generate_data import generate_test_csv
+
+    def generator():
+        try:
+            output_buffer = io.StringIO()
+            generate_test_csv(num_transactions=200, output_file=output_buffer)
+            output_buffer.seek(0)
+            
+            full_df = pd.read_csv(output_buffer)
+            full_df = map_columns(full_df)
+            
+            chunk_size = 15
+            total_chunks = len(full_df) // chunk_size
+            
+            for i in range(total_chunks):
+                chunk = full_df.iloc[:(i+1)*chunk_size]
+                start_time = time.time()
+                engine.load_data(chunk)
+                results = engine.analyze()
+                fraud_rings = engine.get_fraud_rings(results)
+                graph_data = engine.get_graph_data(results)
+                processing_time = round(time.time() - start_time, 2)
+                avg_score = sum(a['suspicion_score'] for a in results) / len(results) if results else 0
+                
+                summary = AnalysisSummary(
+                    total_accounts_analyzed=len(engine.graph.nodes()),
+                    total_transactions=len(chunk),
+                    suspicious_accounts_flagged=len(results),
+                    fraud_rings_detected=len(fraud_rings),
+                    avg_risk_score=round(avg_score, 2),
+                    processing_time_seconds=processing_time
+                )
+                
+                final_data = {
+                    "suspicious_accounts": results,
+                    "fraud_rings": fraud_rings,
+                    "graph_data": graph_data,
+                    "summary": summary.dict(),
+                    "complete": i == total_chunks - 1
+                }
+                yield f"data: {json.dumps(final_data)}\n\n"
+                time.sleep(0.4)
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'complete': True})}\n\n"
+            
+    return StreamingResponse(generator(), media_type="text/event-stream")
+
 app.include_router(router)
 
 @app.websocket("/ws/live-feed")
