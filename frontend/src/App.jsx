@@ -41,8 +41,6 @@ const App = () => {
     const [riskFilter, setRiskFilter] = useState(0);
     const [aiAnalysis, setAiAnalysis] = useState(null);
     const [aiLoading, setAiLoading] = useState(false);
-    const [isLiveStream, setIsLiveStream] = useState(false);
-    const wsRef = useRef(null);
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -69,13 +67,6 @@ const App = () => {
         }
         return () => clearInterval(interval);
     }, [isSimulating, data, simulationSpeed]);
-
-    // Clean up websocket
-    useEffect(() => {
-        return () => {
-            if (wsRef.current) wsRef.current.close();
-        };
-    }, []);
 
     // Compute simulation data
     useEffect(() => {
@@ -338,18 +329,9 @@ const App = () => {
 
                             <button
                                 onClick={handleGenerateDemo}
-                                disabled={isLiveStream}
-                                className={`px-6 py-4 glass border-white/10 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all ${isLiveStream ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:bg-white/5 text-blue-400'}`}
+                                className="px-6 py-4 glass border-white/10 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all hover:bg-white/5 text-blue-400"
                             >
                                 <Database size={16} className="inline mr-2" /> Load Demo Data
-                            </button>
-
-                            <button
-                                onClick={startLiveFeed}
-                                className={`px-6 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all border border-red-500/20 ${isLiveStream ? 'bg-red-500/20 text-red-500 animate-pulse' : 'glass hover:bg-red-500/10 text-red-400'}`}
-                            >
-                                <Radio size={16} className={`inline mr-2 ${isLiveStream ? 'animate-ping' : ''}`} />
-                                {isLiveStream ? 'LIVE STREAMING' : 'START LIVE FEED'}
                             </button>
                         </div>
                     </div>
