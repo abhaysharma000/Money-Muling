@@ -283,9 +283,8 @@ const App = () => {
         setLoading(true);
         setProgress({ status: 'Connecting to Bank API Stream...', percent: 10 });
 
-        const wsUrl = window.location.hostname === 'localhost'
-            ? 'ws://localhost:8000/ws/live-feed'
-            : `wss://${window.location.host}/api/ws/live-feed`;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/ws/live-feed`;
 
         try {
             const ws = new WebSocket(wsUrl);
