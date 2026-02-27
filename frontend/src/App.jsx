@@ -158,6 +158,14 @@ const App = () => {
                                 setData(parsed);
                                 setProgress({ status: 'Analysis Complete', percent: 100 });
                             } else {
+                                // If the chunk contains graph data or results, update UI incrementally
+                                if (parsed.graph_data || parsed.suspicious_accounts) {
+                                    setData(prev => ({
+                                        ...parsed,
+                                        // Ensure summary counts stay accurate during the stream
+                                        summary: parsed.summary || (prev ? prev.summary : null)
+                                    }));
+                                }
                                 setProgress({ status: parsed.status, percent: (parsed.progress || 0) * 100 });
                             }
                         } catch (e) {

@@ -298,13 +298,13 @@ async def live_stream_endpoint():
     def generator():
         try:
             output_buffer = io.StringIO()
-            generate_test_csv(num_transactions=200, output_file=output_buffer)
+            generate_test_csv(num_transactions=150, output_file=output_buffer)
             output_buffer.seek(0)
             
             full_df = pd.read_csv(output_buffer)
             full_df = map_columns(full_df)
             
-            chunk_size = 15
+            chunk_size = 10
             total_chunks = len(full_df) // chunk_size
             
             for i in range(total_chunks):
