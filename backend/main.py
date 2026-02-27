@@ -1,4 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter
+from fastapi import FastAPI, UploadFile, File, HTTPException, APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 import pandas as pd
@@ -285,3 +288,67 @@ async def generate_demo_endpoint():
     return StreamingResponse(analyze_dataframe(df), media_type="text/event-stream")
 
 app.include_router(router)
+
+@app.websocket("/ws/live-feed")
+async def websocket_live_feed(websocket: WebSocket):
+    await websocket.accept()
+    
+    try:
+        from generate_data import generate_test_csv
+    except ImportError:
+        from backend.generate_data import generate_test_csv
+        
+    try:
+        # Generate initial large dataset
+        output_buffer = io.StringIO()
+        generate_test_csv(num_transactions=500, output_file=output_buffer)
+        output_buffer.seek(0)
+        
+        full_df = pd.read_csv(output_buffer)
+        full_df = map_columns(full_df)
+        
+        chunk_size = 20
+        total_chunks = len(full_df) // chunk_size
+        
+        # Stream chunks
+        for i in range(total_chunks):
+            chunk = full_df.iloc[:(i+1)*chunk_size]
+            
+            start_time = time.time()
+            engine.load_data(chunk)
+            results = engine.analyze()
+            
+            fraud_rings = engine.get_fraud_rings(results)
+            graph_data = engine.get_graph_data(results)
+            
+            processing_time = round(time.time() - start_time, 2)
+            avg_score = sum(a['suspicion_score'] for a in results) / len(results) if results else 0
+            
+            summary = AnalysisSummary(
+                total_accounts_analyzed=len(engine.graph.nodes()),
+                total_transactions=len(chunk),
+                suspicious_accounts_flagged=len(results),
+                fraud_rings_detected=len(fraud_rings),
+                avg_risk_score=round(avg_score, 2),
+                processing_time_seconds=processing_time
+            )
+            
+            final_data = {
+                "suspicious_accounts": results,
+                "fraud_rings": fraud_rings,
+                "graph_data": graph_data,
+                "summary": summary.dict(),
+                "complete": i == total_chunks - 1
+            }
+            
+            await websocket.send_json(final_data)
+            await asyncio.sleep(0.5) # Wait 0.5 seconds before sending next chunk
+            
+    except WebSocketDisconnect:
+        print("Live feed disconnected")
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await websocket.send_json({"error": str(e), "complete": True})
+        except:
+            pass

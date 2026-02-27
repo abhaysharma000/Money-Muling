@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, ShieldAlert, Download, Activity, Search, X, Crosshair, BarChart3, Database, Cpu, Zap, Play, Pause } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, ShieldAlert, Download, Activity, Search, X, Crosshair, BarChart3, Database, Cpu, Zap, Play, Pause, Radio } from 'lucide-react';
 import GraphView from './components/GraphView';
 import StatsDashboard from './components/StatsDashboard';
 import TrendChart from './components/TrendChart';
@@ -41,6 +41,8 @@ const App = () => {
     const [riskFilter, setRiskFilter] = useState(0);
     const [aiAnalysis, setAiAnalysis] = useState(null);
     const [aiLoading, setAiLoading] = useState(false);
+    const [isLiveStream, setIsLiveStream] = useState(false);
+    const wsRef = useRef(null);
 
     const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -67,6 +69,13 @@ const App = () => {
         }
         return () => clearInterval(interval);
     }, [isSimulating, data, simulationSpeed]);
+
+    // Clean up websocket
+    useEffect(() => {
+        return () => {
+            if (wsRef.current) wsRef.current.close();
+        };
+    }, []);
 
     // Compute simulation data
     useEffect(() => {
@@ -261,6 +270,69 @@ const App = () => {
         a.click();
     };
 
+    const startLiveFeed = () => {
+        if (isLiveStream) {
+            if (wsRef.current) wsRef.current.close();
+            setIsLiveStream(false);
+            return;
+        }
+
+        setData(null);
+        setError(null);
+        setIsLiveStream(true);
+        setLoading(true);
+        setProgress({ status: 'Connecting to Bank API Stream...', percent: 10 });
+
+        const wsUrl = window.location.hostname === 'localhost'
+            ? 'ws://localhost:8000/ws/live-feed'
+            : `wss://${window.location.host}/api/ws/live-feed`;
+
+        try {
+            const ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                setProgress({ status: 'Connection Established. Waiting for transactions...', percent: 20 });
+                setLoading(false);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const parsedData = JSON.parse(event.data);
+                    if (parsedData.error) {
+                        setError(parsedData.error);
+                        setIsLiveStream(false);
+                        ws.close();
+                        return;
+                    }
+                    setData(parsedData);
+
+                    if (parsedData.complete) {
+                        setIsLiveStream(false);
+                        ws.close();
+                    }
+                } catch (e) {
+                    console.error("Error parsing websocket message", e);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket Error', error);
+                setError("Live Feed Connection Error");
+                setIsLiveStream(false);
+                setLoading(false);
+            };
+
+            ws.onclose = () => {
+                setIsLiveStream(false);
+            };
+        } catch (e) {
+            setError("Could not establish WebSocket connection");
+            setIsLiveStream(false);
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#070708] text-slate-100 p-4 md:p-10 font-sans selection:bg-blue-500/30">
             {/* Nav / Hero Header */}
@@ -292,9 +364,18 @@ const App = () => {
 
                             <button
                                 onClick={handleGenerateDemo}
-                                className="px-6 py-4 glass border-white/10 hover:bg-white/5 rounded-2xl text-xs font-bold uppercase tracking-widest text-blue-400 transition-all"
+                                disabled={isLiveStream}
+                                className={`px-6 py-4 glass border-white/10 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all ${isLiveStream ? 'opacity-50 cursor-not-allowed text-slate-500' : 'hover:bg-white/5 text-blue-400'}`}
                             >
                                 <Database size={16} className="inline mr-2" /> Load Demo Data
+                            </button>
+
+                            <button
+                                onClick={startLiveFeed}
+                                className={`px-6 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all border border-red-500/20 ${isLiveStream ? 'bg-red-500/20 text-red-500 animate-pulse' : 'glass hover:bg-red-500/10 text-red-400'}`}
+                            >
+                                <Radio size={16} className={`inline mr-2 ${isLiveStream ? 'animate-ping' : ''}`} />
+                                {isLiveStream ? 'LIVE STREAMING' : 'START LIVE FEED'}
                             </button>
                         </div>
                     </div>

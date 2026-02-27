@@ -260,7 +260,7 @@ class ForensicsEngine:
         
         return sorted(results, key=lambda x: x['suspicion_score'], reverse=True)
 
-    def detect_shell_chains(self, min_hops=4) -> List[List[str]]:
+    def detect_shell_chains(self, min_hops=3) -> List[List[str]]:
         """Detect linear chains through low-activity nodes (Vectorized Count)"""
         counts = pd.concat([self.df['sender_id'], self.df['receiver_id']]).value_counts()
         chains = []
