@@ -289,21 +289,23 @@ async def generate_demo_endpoint():
 
 @router.get("/live-stream")
 async def live_stream_endpoint():
-    """Streaming alternative to WebSockets for serverless environments (Vercel)"""
+    """Asynchronous streaming for Vercel/Serverless environments"""
     try:
         from generate_data import generate_test_csv
     except ImportError:
         from backend.generate_data import generate_test_csv
 
-    def generator():
+    async def event_generator():
         try:
+            # 1. Smaller dataset for Vercel timeout (10s limit)
             output_buffer = io.StringIO()
-            generate_test_csv(num_transactions=400, output_file=output_buffer)
+            generate_test_csv(num_transactions=100, output_file=output_buffer)
             output_buffer.seek(0)
             
             full_df = pd.read_csv(output_buffer)
             full_df = map_columns(full_df)
             
+            # 2. Granular chunks for better visual feedback
             chunk_size = 5
             total_chunks = len(full_df) // chunk_size
             
@@ -314,31 +316,37 @@ async def live_stream_endpoint():
                 results = engine.analyze()
                 fraud_rings = engine.get_fraud_rings(results)
                 graph_data = engine.get_graph_data(results)
-                processing_time = round(time.time() - start_time, 2)
-                avg_score = sum(a['suspicion_score'] for a in results) / len(results) if results else 0
-                
-                summary = AnalysisSummary(
-                    total_accounts_analyzed=len(engine.graph.nodes()),
-                    total_transactions=len(chunk),
-                    suspicious_accounts_flagged=len(results),
-                    fraud_rings_detected=len(fraud_rings),
-                    avg_risk_score=round(avg_score, 2),
-                    processing_time_seconds=processing_time
-                )
                 
                 final_data = {
                     "suspicious_accounts": results,
                     "fraud_rings": fraud_rings,
                     "graph_data": graph_data,
-                    "summary": summary.dict(),
+                    "summary": {
+                        "total_accounts_analyzed": len(engine.graph.nodes()),
+                        "total_transactions": len(chunk),
+                        "suspicious_accounts_flagged": len(results),
+                        "fraud_rings_detected": len(fraud_rings),
+                        "avg_risk_score": round(sum(a['suspicion_score'] for a in results) / len(results) if results else 0, 2),
+                        "processing_time_seconds": round(time.time() - start_time, 2)
+                    },
                     "complete": i == total_chunks - 1
                 }
                 yield f"data: {json.dumps(final_data)}\n\n"
-                time.sleep(1.0) # Slower streaming cadence for forensic immersion
+                # 3. Non-blocking sleep: 20 chunks * 0.4s = 8s total stream (Vercel allows 10s)
+                await asyncio.sleep(0.4) 
         except Exception as e:
+            print(f"Streaming Error: {e}")
             yield f"data: {json.dumps({'error': str(e), 'complete': True})}\n\n"
             
-    return StreamingResponse(generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no" # Disable buffering on Vercel/Nginx
+        }
+    )
 
 app.include_router(router)
 
