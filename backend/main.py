@@ -298,13 +298,13 @@ async def live_stream_endpoint():
     def generator():
         try:
             output_buffer = io.StringIO()
-            generate_test_csv(num_transactions=150, output_file=output_buffer)
+            generate_test_csv(num_transactions=400, output_file=output_buffer)
             output_buffer.seek(0)
             
             full_df = pd.read_csv(output_buffer)
             full_df = map_columns(full_df)
             
-            chunk_size = 10
+            chunk_size = 5
             total_chunks = len(full_df) // chunk_size
             
             for i in range(total_chunks):
@@ -334,7 +334,7 @@ async def live_stream_endpoint():
                     "complete": i == total_chunks - 1
                 }
                 yield f"data: {json.dumps(final_data)}\n\n"
-                time.sleep(0.4)
+                time.sleep(1.0) # Slower streaming cadence for forensic immersion
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e), 'complete': True})}\n\n"
             
